@@ -29,6 +29,11 @@ Works with BeamNG.drive 0.40.5.
   the 22-25 hitches over 50 ms it caused per 5 minutes no longer showed up. This should make driving noticeably smoother.
 - **Server stalls of a few seconds after teleports**: old files are now deleted in the background instead of on the
   server's main thread, which could hold every message to the game on a busy disk.
+- **Streams crossing lakes drawn as flowing rivers on first visit**: when a river or stream mapped as an OSM
+  waterway ran through a lake whose water raster was still warming in the background, the river planner assumed the
+  waterway was over dry land and built active river objects across the lake. The planner now preserves the raster's
+  readiness mask, excludes river nodes over unknown water pending the async raster retry, and records incomplete
+  water coverage until adjacent lake rasters are warm.
 
 ### Behind the scenes
 - Error reports (only if you share performance data) now say which part of the server an error came from, so damaged

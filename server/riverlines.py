@@ -219,7 +219,8 @@ def _running_median(v, n):
 
 def plan(frame, x, y, cell_water, water_at, dem_at, outline_at=None, radius=None, level_at=None, road_clear=None):
     """The River pieces around (x, y) in `frame`. cell_water(key) -> the water Features of a map-data cell
-    or None (not at hand); water_at(lat, lon) -> depth > 0 where seacarve's tiles already are water;
+    or None (not at hand); water_at(lat, lon) -> (depth, known) where depth > 0 in tiled water (sea/lakes)
+    and known is a bool array (False where raster is pending);
     dem_at(lat, lon) -> the DEM; outline_at(lat, lon) -> True inside a river outline (None: widths by
     class); level_at(lat, lon) -> the carved river level there (seacarve: the same the bed is cut to;
     NaN where none: the DEM rule); road_clear(points) -> the distance to the nearest road edge (RoadClearance;
@@ -292,7 +293,9 @@ def _nodes(frame, ids, kind, pts, water_at, dem_at, outline_at, level_at=None, r
     """A chain's nodes: centre, surface z, width, depth, and where it is in tiled water already ("wet")."""
     la, lo, _ = frame.enu_to_geodetic(pts[:, 0], pts[:, 1], np.zeros(len(pts)))
     la, lo = np.asarray(la), np.asarray(lo)
-    wet = np.asarray(water_at(la, lo)) > 0          # already water (tiles): left out there
+    w_depth, known = water_at(la, lo)
+    wet = np.asarray(w_depth) > 0          # already water (tiles): left out there
+    known = np.asarray(known, bool)
     # the channel: the lowest of the node and four points around it
     d = CHANNEL_PROBE_M
     off = [(0, 0), (d, 0), (-d, 0), (0, d), (0, -d)]
@@ -318,7 +321,7 @@ def _nodes(frame, ids, kind, pts, water_at, dem_at, outline_at, level_at=None, r
         clear = np.asarray(road_clear(centre), np.float64)
         width = np.minimum(width, 2.0 * np.maximum(clear - ROAD_MARGIN_M, RIVER_MIN_HALF_M))
     return {"ids": ids, "kind": kind, "pts": pts, "centre": centre, "z": np.asarray(z, np.float64),
-            "width": width, "depth": depth, "wet": wet, "into": np.zeros(len(pts), bool)}
+            "width": width, "depth": depth, "wet": wet, "known": known, "into": np.zeros(len(pts), bool)}
 
 
 def _pieces(rv, x, y, r):
@@ -326,12 +329,13 @@ def _pieces(rv, x, y, r):
                                                                "depth"))
     near = np.hypot(pts[:, 0] - x, pts[:, 1] - y) <= r + PIECE_M / 2
     gone = rv["wet"] | rv["into"]       # a lake, the sea or a wider river carries the water there
-    keep = ~gone & near
+    valid = rv["known"]
+    keep = ~gone & near & valid
     # one node on into the water it flows into (and out of), so they meet without a gap
     ext = keep.copy()
     ext[1:] |= keep[:-1] & gone[1:] & near[1:]
     ext[:-1] |= keep[1:] & gone[:-1] & near[:-1]
-    keep = ext
+    keep = ext & valid
     sq = np.floor(pts / PIECE_M).astype(np.int64)
     out = []
     base = hashlib.sha1("|".join(ids).encode()).hexdigest()[:10]

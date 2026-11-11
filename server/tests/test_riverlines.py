@@ -57,7 +57,7 @@ class PlanTest(unittest.TestCase):
                             ("s2", "stream", "stream", [east(-200), east(1500)]),
                             ("d1", "canal", "ditch", [(LON, LAT + 0.002), east(300)])])
 
-    def plan(self, wet=lambda la, lo: np.zeros(np.shape(la))):
+    def plan(self, wet=lambda la, lo: (np.zeros(np.shape(la)), np.ones(np.shape(la), bool))):
         # the channel falls 1 m per 100 m eastwards, with a 2 m bump the surface must not follow up
         def dem(la, lo):
             x = (np.asarray(lo) - LON) / M_LON
@@ -79,19 +79,47 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(sorted(r.key for r in rv), sorted(r.key for r in self.plan()), "stable keys")
 
     def test_left_out_where_tiles_are_water_but_reaching_in(self):
-        wet = lambda la, lo: ((np.asarray(lo) - LON) / M_LON > 0).astype(float)    # noqa: E731
+        wet = lambda la, lo: (((np.asarray(lo) - LON) / M_LON > 0).astype(float), np.ones(np.shape(la), bool))    # noqa: E731
         rv = self.plan(wet)
         self.assertTrue(rv)
         xs = [n[0] for r in rv for n in r.nodes]
         self.assertTrue(all(v <= riverlines.SPACING_M["stream"] + 1e-6 for v in xs), "stops at the lake")
         self.assertGreater(max(xs), 0.0, "one node into it: no gap at the mouth")
 
+    def test_unknown_water_samples_excluded_pending_retry(self):
+        # 1. Unknown middle (raster pending): unknown nodes are excluded pending async retry
+        def water_unknown(la, lo):
+            x = (np.asarray(lo) - LON) / M_LON
+            known = x < 0
+            wet = np.zeros(np.shape(la), float)
+            return wet, known
+        rv_unknown = self.plan(water_unknown)
+        self.assertTrue(rv_unknown)
+        xs_unknown = [n[0] for r in rv_unknown for n in r.nodes]
+        self.assertTrue(all(v <= 0.0 for v in xs_unknown), "unknown nodes beyond dry land excluded pending async raster")
+
+        # 2. Retry known-dry (raster ready, dry land): stream is fully restored
+        def water_dry(la, lo):
+            return np.zeros(np.shape(la), float), np.ones(np.shape(la), bool)
+        rv_dry = self.plan(water_dry)
+        xs_dry = [n[0] for r in rv_dry for n in r.nodes]
+        self.assertGreater(max(xs_dry), 1000.0, "retry known-dry restores stream downstream")
+
+        # 3. Retry known-wet (raster ready, lake): interior excluded, one node into mouth
+        def water_wet(la, lo):
+            x = (np.asarray(lo) - LON) / M_LON
+            return (x > 0).astype(float) * 4.0, np.ones(np.shape(la), bool)
+        rv_wet = self.plan(water_wet)
+        xs_wet = [n[0] for r in rv_wet for n in r.nodes]
+        self.assertTrue(all(v <= riverlines.SPACING_M["stream"] + 1e-6 for v in xs_wet), "known-wet excludes lake interior")
+        self.assertGreater(max(xs_wet), 0.0, "known-wet reaches one node into lake mouth")
+
     def test_confluence_narrow_ends_in_wide(self):
         f = geodesy.EnuFrame(LAT, LON)
         lines = Lines([("big", "river", "river", [(LON - 0.004, LAT + 0.003), (LON + 0.004, LAT + 0.003)]),
                        ("trib", "stream", "stream", [(LON, LAT - 0.004), (LON, LAT + 0.003)])])
         outline = lambda la, lo: np.abs((np.asarray(la) - (LAT + 0.003)) * 111320.0) < 40.0   # noqa: E731
-        rv = riverlines.plan(f, 0.0, 0.0, lambda k: lines, lambda la, lo: np.zeros(np.shape(la)),
+        rv = riverlines.plan(f, 0.0, 0.0, lambda k: lines, lambda la, lo: (np.zeros(np.shape(la)), np.ones(np.shape(la), bool)),
                              lambda la, lo: np.full(np.shape(la), 20.0), outline)
         big_y = 0.003 * 111320.0
         trib = [n for r in rv if r.kind == "stream" for n in r.nodes]
@@ -132,7 +160,7 @@ class RoadClearanceTest(unittest.TestCase):
         it keeps its width by class."""
         frame = geodesy.EnuFrame(46.6, 7.9, 0.0)
         pts = np.stack([np.arange(0.0, 200.0, 20.0), np.zeros(10)], -1)
-        water = lambda la, lo: np.zeros(np.shape(la))              # noqa: E731
+        water = lambda la, lo: (np.zeros(np.shape(la)), np.ones(np.shape(la), bool))  # noqa: E731
         dem = lambda la, lo: np.full(np.shape(la), 600.0)          # noqa: E731
         free = riverlines._nodes(frame, ("w",), "river", pts, water, dem, None)
         rc = riverlines.RoadClearance([(-50.0, 10.0, 250.0, 10.0, 3.0)])
@@ -173,7 +201,7 @@ class UndergroundTest(unittest.TestCase):
             return 50.0 - (np.asarray(lo) - LON) / M_LON / 100.0
 
         def plan(lines):
-            return riverlines.plan(f, 0.0, 0.0, lambda k: lines, lambda la, lo: np.zeros(np.shape(la)), dem)
+            return riverlines.plan(f, 0.0, 0.0, lambda k: lines, lambda la, lo: (np.zeros(np.shape(la)), np.ones(np.shape(la), bool)), dem)
 
         both = plan(self.lines(['{"waterway":"stream"}', '{"waterway":"stream"}']))
         piped = plan(self.lines(['{"waterway":"stream"}', '{"waterway":"stream","tunnel":"culvert"}']))

@@ -7731,8 +7731,10 @@ class Connection:
                     return md.cell(key, layers=("water",)).layers.get("water")
 
                 def tiled(la, lo):      # already water as tiles (the sea, lakes; not rivers)
-                    d, lv, _ = sea.water(la, lo, wait=False)
-                    return np.where(np.isfinite(lv) & ~sea.outline_at(la, lo), d, 0.0)
+                    d, lv, known = sea.water(la, lo, wait=False)
+                    if not np.all(known):
+                        missing[0] = True
+                    return np.where(np.isfinite(lv) & ~sea.outline_at(la, lo), d, 0.0), known
 
                 def road_clear():   # the roads of the cells at hand around: the rivers keep off them
                     md = sea.md
