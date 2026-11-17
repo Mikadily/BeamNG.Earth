@@ -2,6 +2,25 @@
 
 What changed in each release of BeamNG.Earth, newest first.
 
+## 1.10.1 beta (2026-11-17)
+
+> **Join the TGForever Discord, [discord.gg/tgf](https://discord.gg/tgf), to chat, get help, report bugs or help
+> develop the mod.** For help, that includes multiplayer:
+> BeamNG.Earth isn't like a normal BeamNG mod (it runs its own app next to the game), so if something isn't working
+> with BeamMP, it's almost certainly a BeamNG.Earth problem, not a BeamMP one. Please don't contact the BeamMP team or
+> open BeamMP support tickets about it. BeamNG.Earth servers are hidden from players who don't run BeamNG.Earth
+> (BeamMP can't install it for them: it needs its own app), so they only show in the BeamNG.Earth tab of BeamMP's
+> server browser.
+
+Works with BeamNG.drive 0.40.5.
+
+### Fixed
+- **Streams crossing lakes drawn as flowing rivers on first visit**: when a river or stream mapped as an OSM
+  waterway ran through a lake whose water raster was still warming in the background, the river planner assumed the
+  waterway was over dry land and built active river objects across the lake. The planner now preserves the raster's
+  readiness mask, excludes river nodes over unknown water pending the async raster retry, and records incomplete
+  water coverage until adjacent lake rasters are warm.
+
 ## 1.9.1 beta (2026-11-09)
 
 > **Join the TGForever Discord, [discord.gg/tgf](https://discord.gg/tgf), to chat, get help, report bugs or help
@@ -29,11 +48,6 @@ Works with BeamNG.drive 0.40.5.
   the 22-25 hitches over 50 ms it caused per 5 minutes no longer showed up. This should make driving noticeably smoother.
 - **Server stalls of a few seconds after teleports**: old files are now deleted in the background instead of on the
   server's main thread, which could hold every message to the game on a busy disk.
-- **Streams crossing lakes drawn as flowing rivers on first visit**: when a river or stream mapped as an OSM
-  waterway ran through a lake whose water raster was still warming in the background, the river planner assumed the
-  waterway was over dry land and built active river objects across the lake. The planner now preserves the raster's
-  readiness mask, excludes river nodes over unknown water pending the async raster retry, and records incomplete
-  water coverage until adjacent lake rasters are warm.
 
 ### Behind the scenes
 - Error reports (only if you share performance data) now say which part of the server an error came from, so damaged
